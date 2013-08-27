@@ -1,0 +1,103 @@
+#This is the script with analytical procedures used in the manuscript entitled
+#Provete, D.B. & Morais, A. Frog calls, body size, and the shadow of the forgotten 
+#ancestors: a reply to Gingras et al. (2013) submited to J. Zool. on XX 2013
+#R version 3.0.1 Date: April 2013; last modified: 13 AUG 2013
+#(c) Diogo B. Provete | email: dbprovete@gmail.com
+
+library(phytools)#v. 0.3-10 | ape v. 3.0-9
+library(bbmle)
+library(nlme)
+library(MuMIn)
+
+#---> Phylogeny and trait data input April 2013
+filog=read.tree("phylo.txt")
+traits=read.table("dados.txt", h=T, dec=",")
+traits=log(traits)#convertendo para escala log
+DF=as.matrix(traits$DF)
+rownames(DF)=rownames(traits)
+colnames(DF)=c("DF")
+BS=as.matrix(traits$Body_size)
+rownames(BS)=rownames(traits)
+colnames(BS)=c("Body_size")
+
+fil=multi2di(filog)#resolving polytomies randomly
+filo<-compute.brlen(fil, method="Grafen")#setting total branch length to unit
+splitplotTree(filo, fsize=0.5)
+plot.phylo(filo, "fan", cex=0.3, show.node.label=T)
+
+#---Testing model fit with fitContinuous
+TMP=treedata(filo, traits)
+DAT=TMP$data
+PHY=TMP$phy
+#=> Veja script chamado funcao AIC fit na pasta
+res=fitGeospiza("Body_size")
+print(res)
+res1=fitGeospiza("BS")
+print(res1)
+
+#----Ploting traits and the phylogeny
+#Definindo os bounds das variaveis para informar no argumento at da funcao axis
+min(log(BS))
+max(log(BS))
+min(log(DF))
+max(log(DF))
+
+#x11()
+#par(mfrow=c(1,1))
+plot(filo, x.lim=10, show.tip.label=F)
+segments(rep(2, 140), 1:140, rep(2, 140) + log(BS), 1:140, lwd = 2)#140=no. species
+axis(1, at = c(2, 5, 8), labels = c(2, 4, 8))#at=variacao na variavel
+mtext("ln(Body size)", at = 5, side = 1, line = 2)#ploting body size
+axisPhylo()
+mtext("Branch length", at = 1, side = 1, line = 2)
+
+plot(filo, x.lim=15, show.tip.label=F)
+segments(rep(2, 140), 1:140, rep(2, 140) + log(DF), 1:140, lwd = 2)
+axis(1, at = c(2, 7, 11), labels = c(0, 5, 9))
+mtext("ln(Dom Freq)", at = 6, side = 1, line = 2)#ploting dominant frequency
+axisPhylo()
+mtext("Branch length", at = 1, side = 1, line = 2)
+
+#---Phylogenetic signal tests
+phylosig(filo, BS, "lambda", test=T)
+phylosig(filo, DF, "lambda", test=T)
+phylosig(filo, DF, test=T)
+phylosig(filo, BS, test=T)
+
+#---building a PGLS model following Revell (2010) MEE
+result2<-gls(DF~Body_size,data=traits,correlation=corMartins(1, filo),method="ML")
+summary(result2)##OU's Alpha estimated=24.44
+
+#---Diagnosics of PGLS
+source("http://ib.berkeley.edu/courses/ib200b/scripts/diagnostics_v3.R")
+diagnostics(DF,filo)
+diagnostics(BS,filo)
+
+#---OLS
+mod1=lm(DF~Body_size,data=traits)
+summary(mod1)
+beta.weights(mod1)
+
+#---Diagnostic plots for OLS
+par(mfrow=c(2,2))
+plot(mod1)
+
+#---Plots comparing the two models
+par(mfrow=c(1,2))
+plot(log(DF)~log(BS), xlab="ln(Body size)", ylab="ln(Dominant Frequency)")
+abline(gls(log(DF)~log(Body_size),data=traits,correlation=corMartins(1, filo),method="ML"))
+title("PGLS")
+plot(log(DF)~log(BS), xlab="ln(Body size)", ylab="ln(Dominant Frequency)")
+abline(lm(log(DF)~log(Body_size),data=traits))
+title("OLS")
+
+AICctab(result2, mod1, weights=T, base=T, nobs=140)#model selection to compare the two models
+
+#Phylogenetic correlogram
+source('Documents/Meus Artigos/[2013] Reply J. Zool./Phylogenetic distogram.R')
+#for the code see https://stat.ethz.ch/pipermail/r-sig-phylo/2012-September/002262.html
+par(mfrow=c(1,2))
+distcor(DF, filo, dcfun="IM")#correlogram
+distcor(BS, filo, dcfun="IM")#correlogram
+distcor(BS, filo, dcfun="ED")#distogram
+distcor(DF, filo, dcfun="ED")#distogram
